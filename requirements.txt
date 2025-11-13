@@ -4,8 +4,10 @@ pandas>=2.0.0
 openpyxl>=3.1.0  # Required for reading Excel files with pandas
 
 # CrewAI Framework
-crewai>=0.1.0
-crewai-tools>=0.1.0
+crewai>=0.28.0
+crewai-tools>=0.1.8
+langchain>=0.1.0
+langchain-openai>=0.0.5
 
 # Environment and Configuration
 python-dotenv>=1.0.0
