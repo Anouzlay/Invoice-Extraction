@@ -2,7 +2,7 @@
 from typing import Dict
 import fitz
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 
 class PdfExtractorArgs(BaseModel):
     pdf_path: str = Field(..., description="Absolute or relative path to the PDF file")

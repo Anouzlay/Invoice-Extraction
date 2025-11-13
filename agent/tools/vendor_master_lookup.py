@@ -5,7 +5,7 @@ import re
 import pandas as pd
 from rapidfuzz import process, fuzz
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 
 class VendorLookupArgs(BaseModel):
     vendor_name: str = Field(..., description="Vendor name to search in the master Excel")

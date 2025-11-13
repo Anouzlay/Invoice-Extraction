@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel, Field, field_validator, model_validator
 import json
 import re
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 
 class VATCalculationItem(BaseModel):
     amount: float = Field(..., description="Amount value (excluding or including VAT depending on context)")

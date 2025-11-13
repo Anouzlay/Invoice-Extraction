@@ -3,7 +3,7 @@ from typing import Optional, Dict
 from pathlib import Path
 import pandas as pd
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 
 class CostCategoryLookupArgs(BaseModel):
     vendor_number: str = Field(..., description="Vendor number (VENDORACCOUNTNUMBER) to search in the cost category allocation Excel")
