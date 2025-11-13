@@ -183,6 +183,77 @@ def _display_result_history(records: Iterable[dict[str, Any]]) -> None:
         hide_index=False,
         height=400,
     )
+    
+    # Add JavaScript to forcefully hide export buttons as a fallback
+    st.markdown(
+        """
+        <script>
+        (function() {
+            function hideExportButtons() {
+                // Hide ALL element toolbars (not just in results-card)
+                const toolbars = document.querySelectorAll('[data-testid="stElementToolbar"]');
+                toolbars.forEach(toolbar => {
+                    // Check if it's near a dataframe
+                    const nearbyDataframe = toolbar.closest('[data-testid="stDataFrame"]') || 
+                                           toolbar.previousElementSibling?.querySelector('[data-testid="stDataFrame"]') ||
+                                           toolbar.nextElementSibling?.querySelector('[data-testid="stDataFrame"]');
+                    if (nearbyDataframe || toolbar.closest('.results-card')) {
+                        toolbar.style.display = 'none';
+                        toolbar.style.visibility = 'hidden';
+                        toolbar.style.opacity = '0';
+                        toolbar.style.height = '0';
+                        toolbar.style.width = '0';
+                        toolbar.style.pointerEvents = 'none';
+                    }
+                });
+                
+                // Hide buttons in dataframe
+                const buttons = document.querySelectorAll('[data-testid="stDataFrame"] button');
+                buttons.forEach(button => {
+                    button.style.display = 'none';
+                    button.style.visibility = 'hidden';
+                    button.style.pointerEvents = 'none';
+                });
+                
+                // Hide any buttons with download/search/fullscreen related attributes
+                const allButtons = document.querySelectorAll('button');
+                allButtons.forEach(button => {
+                    const title = button.getAttribute('title') || '';
+                    const ariaLabel = button.getAttribute('aria-label') || '';
+                    if (title.toLowerCase().includes('download') || 
+                        title.toLowerCase().includes('search') || 
+                        title.toLowerCase().includes('fullscreen') ||
+                        ariaLabel.toLowerCase().includes('download') ||
+                        ariaLabel.toLowerCase().includes('search') ||
+                        ariaLabel.toLowerCase().includes('fullscreen')) {
+                        const nearDataframe = button.closest('[data-testid="stDataFrame"]') ||
+                                            button.closest('.results-card');
+                        if (nearDataframe) {
+                            button.style.display = 'none';
+                            button.style.visibility = 'hidden';
+                            button.style.pointerEvents = 'none';
+                        }
+                    }
+                });
+            }
+            
+            // Run immediately
+            hideExportButtons();
+            
+            // Run after a short delay to catch dynamically loaded elements
+            setTimeout(hideExportButtons, 100);
+            setTimeout(hideExportButtons, 500);
+            setTimeout(hideExportButtons, 1000);
+            
+            // Use MutationObserver to catch dynamically added elements
+            const observer = new MutationObserver(hideExportButtons);
+            observer.observe(document.body, { childList: true, subtree: true });
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+    
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -291,7 +362,23 @@ def _inject_ui_overrides() -> None:
                 min-width: max-content;
             }
 
-            /* Hide export buttons (download, search, fullscreen) */
+            /* Hide the Streamlit element toolbar (contains export buttons) - Global and specific */
+            [data-testid="stElementToolbar"],
+            .results-card [data-testid="stElementToolbar"],
+            .results-card [data-testid="stDataFrame"] [data-testid="stElementToolbar"],
+            [data-testid="stDataFrame"] [data-testid="stElementToolbar"],
+            [data-testid="stDataFrame"] ~ [data-testid="stElementToolbar"],
+            [data-testid="stDataFrame"] + [data-testid="stElementToolbar"] {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
+            }
+
+            /* Hide export buttons (download, search, fullscreen) - multiple selectors */
             .results-card [data-testid="stDataFrame"] button,
             .results-card [data-testid="stDataFrame"] [title*="Download"],
             .results-card [data-testid="stDataFrame"] [title*="Search"],
@@ -303,10 +390,12 @@ def _inject_ui_overrides() -> None:
             .results-card [data-testid="stDataFrame"] [data-testid*="search"],
             .results-card [data-testid="stDataFrame"] [data-testid*="fullscreen"] {
                 display: none !important;
+                visibility: hidden !important;
             }
 
             /* Hide the toolbar that contains export buttons */
-            .results-card [data-testid="stDataFrame"] > div:first-child > div:first-child {
+            .results-card [data-testid="stDataFrame"] > div:first-child > div:first-child,
+            .results-card [data-testid="stDataFrame"] > div > div:first-child {
                 display: none !important;
             }
 
@@ -314,7 +403,8 @@ def _inject_ui_overrides() -> None:
             .results-card [data-testid="stDataFrame"] .stToolbar,
             .results-card [data-testid="stDataFrame"] [class*="toolbar"],
             .results-card [data-testid="stDataFrame"] [class*="Toolbar"],
-            .results-card [data-testid="stDataFrame"] [class*="stDataFrameToolbar"] {
+            .results-card [data-testid="stDataFrame"] [class*="stDataFrameToolbar"],
+            .results-card [data-testid="stDataFrame"] [class*="element-container"] > div:first-child {
                 display: none !important;
             }
 
@@ -324,9 +414,10 @@ def _inject_ui_overrides() -> None:
                 display: none !important;
             }
 
-            /* More specific: hide toolbar row if it exists */
-            .results-card [data-testid="stDataFrame"] > div > div:has(button),
-            .results-card [data-testid="stDataFrame"] > div > div:has([role="button"]) {
+            /* Hide toolbar buttons more aggressively */
+            .results-card button[kind="header"],
+            .results-card [data-testid="stDataFrame"] ~ [data-testid="stElementToolbar"],
+            .results-card [data-testid="stDataFrame"] + [data-testid="stElementToolbar"] {
                 display: none !important;
             }
 
