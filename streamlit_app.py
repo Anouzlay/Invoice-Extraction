@@ -291,6 +291,45 @@ def _inject_ui_overrides() -> None:
                 min-width: max-content;
             }
 
+            /* Hide export buttons (download, search, fullscreen) */
+            .results-card [data-testid="stDataFrame"] button,
+            .results-card [data-testid="stDataFrame"] [title*="Download"],
+            .results-card [data-testid="stDataFrame"] [title*="Search"],
+            .results-card [data-testid="stDataFrame"] [title*="Fullscreen"],
+            .results-card [data-testid="stDataFrame"] [aria-label*="Download"],
+            .results-card [data-testid="stDataFrame"] [aria-label*="Search"],
+            .results-card [data-testid="stDataFrame"] [aria-label*="Fullscreen"],
+            .results-card [data-testid="stDataFrame"] [data-testid*="download"],
+            .results-card [data-testid="stDataFrame"] [data-testid*="search"],
+            .results-card [data-testid="stDataFrame"] [data-testid*="fullscreen"] {
+                display: none !important;
+            }
+
+            /* Hide the toolbar that contains export buttons */
+            .results-card [data-testid="stDataFrame"] > div:first-child > div:first-child {
+                display: none !important;
+            }
+
+            /* Alternative selector for export buttons toolbar */
+            .results-card [data-testid="stDataFrame"] .stToolbar,
+            .results-card [data-testid="stDataFrame"] [class*="toolbar"],
+            .results-card [data-testid="stDataFrame"] [class*="Toolbar"],
+            .results-card [data-testid="stDataFrame"] [class*="stDataFrameToolbar"] {
+                display: none !important;
+            }
+
+            /* Hide any element with download/search/fullscreen icons */
+            .results-card [data-testid="stDataFrame"] svg[viewBox*="24"],
+            .results-card [data-testid="stDataFrame"] [role="button"] {
+                display: none !important;
+            }
+
+            /* More specific: hide toolbar row if it exists */
+            .results-card [data-testid="stDataFrame"] > div > div:has(button),
+            .results-card [data-testid="stDataFrame"] > div > div:has([role="button"]) {
+                display: none !important;
+            }
+
             .results-card h4 {
                 margin-bottom: 1.1rem;
             }
