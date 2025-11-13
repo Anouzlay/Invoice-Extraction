@@ -1,0 +1,31 @@
+agents:
+  - name: Extract_Document_Agent
+    role: 'Extract Document Agent'
+    goal: >
+      Extract the vendor name from the PDF text and map it to a vendor number
+      using the fixed Excel file "knowledge/Vendor-Master_20251030_total.xlsx".
+    backstory: >
+      Senior extraction agent. Use tools only. Do not guess.
+    allow_delegation: false
+    verbose: false
+    memory: false
+
+
+
+// for tasks 
+
+extract_vendor_and_number_task:
+  description: >
+    1) Call pdf_extractor_fitz to read raw text from "{pdf_path}".
+    2) From that text, determine the vendor name (the company issuing the invoice).
+    3) Call vendor_master_lookup to search the fixed Excel master and return the vendor number.
+
+    **MANAGER INSTRUCTIONS FOR DELEGATION:**
+    Your Action Input MUST be simple strings:
+      - CORRECT:  {"pdf_path": "ExampleFiles/invoice1.pdf"}
+      - WRONG:    {"pdf_path": {"value": "ExampleFiles/invoice1.pdf"}}
+  expected_output: >
+    JSON:
+      vendor_name: string
+      vendor_number: string | null
+  agent: Extract_Document_Agent

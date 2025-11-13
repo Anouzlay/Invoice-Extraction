@@ -1,0 +1,38 @@
+# Core Application Dependencies
+streamlit>=1.28.0
+pandas>=2.0.0
+openpyxl>=3.1.0  # Required for reading Excel files with pandas
+
+# CrewAI Framework
+crewai>=0.1.0
+crewai-tools>=0.1.0
+
+# Environment and Configuration
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# PDF Processing
+PyMuPDF>=1.23.0  # Also known as fitz
+
+# String Matching
+rapidfuzz>=3.0.0
+
+# DeepSeek-OCR Dependencies (optional - only if using DeepSeek-OCR functionality)
+# Uncomment if you need DeepSeek-OCR features:
+# transformers>=4.46.3
+# tokenizers>=0.20.3
+# img2pdf>=0.5.0
+# einops>=0.7.0
+# easydict>=1.10
+# addict>=2.4.0
+# Pillow>=10.0.0
+# numpy>=1.24.0
+# torch>=2.0.0
+# vllm>=0.2.0
+# flash-attn>=2.0.0
+# tqdm>=4.65.0
+# torchvision>=0.15.0
+
