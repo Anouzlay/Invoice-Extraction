@@ -9,33 +9,60 @@ from typing import Any, Iterable
 import pandas as pd
 import streamlit as st
 
+
+def _get_openai_api_key() -> str | None:
+    """Get OpenAI API key from Streamlit secrets or environment.
+    
+    Returns the API key if found, None otherwise.
+    This function handles both local development and Streamlit Cloud.
+    """
+    # First, try to get from Streamlit secrets (for Streamlit Cloud)
+    try:
+        if hasattr(st, "secrets") and st.secrets is not None:
+            # Method 1: Try attribute-style access (st.secrets.OPENAI_API_KEY)
+            # This is the most common way on Streamlit Cloud
+            try:
+                api_key = getattr(st.secrets, "OPENAI_API_KEY", None)
+                if api_key and str(api_key).strip():
+                    return str(api_key).strip()
+            except (AttributeError, TypeError):
+                pass
+            
+            # Method 2: Try dictionary-style access (st.secrets["OPENAI_API_KEY"])
+            try:
+                if hasattr(st.secrets, "get"):
+                    api_key = st.secrets.get("OPENAI_API_KEY")
+                else:
+                    api_key = st.secrets["OPENAI_API_KEY"]
+                if api_key and str(api_key).strip():
+                    return str(api_key).strip()
+            except (KeyError, TypeError, AttributeError):
+                pass
+            
+            # Method 3: Try accessing via __getitem__ or direct attribute
+            try:
+                api_key = st.secrets.__getitem__("OPENAI_API_KEY")
+                if api_key and str(api_key).strip():
+                    return str(api_key).strip()
+            except (KeyError, AttributeError, TypeError):
+                pass
+    except Exception:
+        # Secrets not available or not configured - this is OK for local dev
+        pass
+    
+    # Fallback to environment variable (for local development)
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if api_key and str(api_key).strip():
+        return str(api_key).strip()
+    
+    return None
+
+
 # Set OpenAI API key from Streamlit secrets before importing crew
 # This ensures secrets are used on Streamlit Cloud instead of .env files
-try:
-    # On Streamlit Cloud, secrets can be accessed as attributes or dictionary keys
-    # Try attribute access first (most common on Streamlit Cloud)
-    if hasattr(st, "secrets"):
-        try:
-            # Try attribute-style access (st.secrets.OPENAI_API_KEY)
-            api_key = st.secrets.OPENAI_API_KEY
-            if api_key:
-                os.environ["OPENAI_API_KEY"] = str(api_key)
-        except (AttributeError, KeyError):
-            # Fallback to dictionary-style access (st.secrets["OPENAI_API_KEY"])
-            try:
-                api_key = st.secrets["OPENAI_API_KEY"]
-                if api_key:
-                    os.environ["OPENAI_API_KEY"] = str(api_key)
-            except (KeyError, TypeError):
-                # Secret not found - show error on Streamlit Cloud
-                st.error("⚠️ OPENAI_API_KEY not found in Streamlit secrets. Please add it in your app settings.")
-                st.error("💡 Make sure your secrets are formatted correctly in TOML format:")
-                st.code('OPENAI_API_KEY = "your-api-key-here"', language="toml")
-                st.stop()
-except Exception:
-    # Streamlit secrets not available - this should only happen in local dev
-    # Will fall back to .env file in crew.py for local development
-    pass
+api_key = _get_openai_api_key()
+if api_key:
+    os.environ["OPENAI_API_KEY"] = api_key
 
 from crew import crew
 
@@ -344,6 +371,45 @@ def main() -> None:
         page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🧾",
         layout="wide",
     )
+
+    # Check for API key and show error if not found (only on Streamlit Cloud)
+    # On local dev, crew.py will use .env file
+    api_key = _get_openai_api_key()
+    if not api_key:
+        # Check if we're likely on Streamlit Cloud (secrets should be available)
+        try:
+            if hasattr(st, "secrets") and st.secrets is not None:
+                # We're on Streamlit Cloud but key is missing
+                st.error("⚠️ **OPENAI_API_KEY not found in Streamlit secrets**")
+                
+                # Debug: Show what secrets are available (without revealing values)
+                try:
+                    secrets_keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+                    if secrets_keys:
+                        st.info(f"🔍 Available secrets keys: {', '.join(secrets_keys)}")
+                    else:
+                        # Try to see if secrets object has any attributes
+                        attrs = [attr for attr in dir(st.secrets) if not attr.startswith('_')]
+                        if attrs:
+                            st.info(f"🔍 Secrets object has attributes: {', '.join(attrs[:5])}")
+                except Exception:
+                    pass
+                
+                st.error("Please add it in your app settings:")
+                st.markdown("1. Go to your Streamlit Cloud app dashboard")
+                st.markdown("2. Navigate to **Settings** → **Secrets** (or **Advanced settings** → **Secrets**)")
+                st.markdown("3. Add your secret in TOML format (make sure there are NO brackets or sections):")
+                st.code('OPENAI_API_KEY = "sk-proj-your-key-here"', language="toml")
+                st.warning("⚠️ **Important:** The format should be exactly as shown above - no `[secrets]` section header!")
+                st.markdown("4. Click **Save** and wait 1-2 minutes for changes to propagate")
+                st.markdown("5. **Restart your app** from the Streamlit Cloud dashboard")
+                st.stop()
+        except Exception as e:
+            # Local development - will use .env file via crew.py
+            # But if we're on Streamlit Cloud and there's an error, show it
+            if "streamlit" in str(type(st)).lower():
+                st.warning(f"Could not access secrets: {str(e)}")
+            pass
 
     _inject_ui_overrides()
 
