@@ -130,6 +130,13 @@ def _display_result_history(records: Iterable[dict[str, Any]]) -> None:
         "due_date": "Due Date",
         "invoice_number": "Invoice Number",
         "orderer_name": "Orderer Name",
+        "currency": "Currency",
+        "invoice_description": "Invoice Description",
+        "po_number": "PO Number",
+        "payment_id": "Payment Id",
+        "total_amount_without_vat": "Total Amount Without Vat",
+        "total_amount_with_vat": "Total Amount With Vat",
+        "total_vat_amount": "Total Vat Amount",
     }
     humanized_headers = {
         column: column_labels.get(column, column.replace("_", " ").title())
@@ -169,7 +176,13 @@ def _display_result_history(records: Iterable[dict[str, Any]]) -> None:
             f'<div class="keyword-panel">{"".join(keyword_badges)}</div>',
             unsafe_allow_html=True,
         )
-    st.table(display_df)
+    # Use st.dataframe for better scrolling support
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=False,
+        height=400,
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -252,6 +265,32 @@ def _inject_ui_overrides() -> None:
                 overflow: visible;
             }
 
+            .results-card .stDataFrame {
+                overflow-x: auto;
+                overflow-y: auto;
+                max-width: 100%;
+            }
+
+            .results-card div[data-testid="stDataFrame"] {
+                overflow-x: auto !important;
+                overflow-y: auto !important;
+            }
+
+            .results-card div[data-testid="stDataFrame"] > div {
+                overflow-x: auto !important;
+                overflow-y: auto !important;
+            }
+
+            /* Ensure the dataframe wrapper allows scrolling */
+            .results-card [data-testid="stDataFrame"] {
+                width: 100%;
+                overflow-x: auto;
+            }
+
+            .results-card [data-testid="stDataFrame"] > div {
+                min-width: max-content;
+            }
+
             .results-card h4 {
                 margin-bottom: 1.1rem;
             }
@@ -292,8 +331,15 @@ def _inject_ui_overrides() -> None:
             .results-card div[data-testid="stDataFrame"] {
                 border-radius: 14px;
                 border: 1px solid rgba(0, 43, 73, 0.12);
-                overflow: hidden;
+                overflow-x: auto !important;
+                overflow-y: auto !important;
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+                max-width: 100%;
+            }
+
+            .results-card div[data-testid="stDataFrame"] > div {
+                overflow-x: auto !important;
+                min-width: max-content;
             }
 
             .results-card div[data-testid="stDataFrame"] table {
@@ -307,9 +353,16 @@ def _inject_ui_overrides() -> None:
                 font-weight: 600;
                 padding-top: 0.85rem;
                 padding-bottom: 0.85rem;
+                padding-left: 1rem;
+                padding-right: 1rem;
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 border-bottom: 1px solid rgba(3, 22, 42, 0.35);
+                white-space: nowrap;
+                min-width: 120px;
+                position: sticky;
+                top: 0;
+                z-index: 10;
             }
 
             .results-card div[data-testid="stDataFrame"] tbody td {
@@ -317,6 +370,11 @@ def _inject_ui_overrides() -> None:
                 border-bottom: 1px solid rgba(0, 43, 73, 0.08);
                 background: white;
                 font-size: 0.95rem;
+                white-space: nowrap;
+                min-width: 120px;
+                max-width: 400px;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .results-card div[data-testid="stDataFrame"] tbody tr:nth-child(odd) td {
