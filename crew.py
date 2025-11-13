@@ -10,10 +10,25 @@ if "OPENAI_API_KEY" not in os.environ:
     load_dotenv()
 
 from crewai import Crew, Process, Agent, Task
+from langchain_openai import ChatOpenAI
 from agent.tools.pdf_extractor_fitz import PdfExtractorFitz
 from agent.tools.vendor_master_lookup import VendorMasterLookup
 from agent.tools.cost_category_lookup import CostCategoryLookup
 from agent.tools.vat_calculator import VATCalculator
+
+# Configure LLM explicitly for CrewAI
+# This ensures CrewAI can find and use the OpenAI provider
+# The API key should already be set in os.environ by streamlit_app.py
+if "OPENAI_API_KEY" not in os.environ:
+    raise ValueError(
+        "OPENAI_API_KEY not found in environment. "
+        "Please set it in Streamlit secrets or .env file."
+    )
+
+llm = ChatOpenAI(
+    model="gpt-4o",  # or "gpt-3.5-turbo" for faster/cheaper
+    temperature=0.7,
+)
 
 # Get base directory for deployment-safe paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -55,7 +70,8 @@ for agent_data in agents_data["agents"]:
         allow_delegation=agent_data.get("allow_delegation", False),
         verbose=agent_data.get("verbose", True),
         memory=agent_data.get("memory", False),
-        tools=agent_tools
+        tools=agent_tools,
+        llm=llm  # Explicitly set the LLM
     )
     agents.append(agent)
     agents_by_name[agent_data["name"]] = agent  # Store mapping
