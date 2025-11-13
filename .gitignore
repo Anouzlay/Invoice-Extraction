@@ -35,6 +35,7 @@ ENV/
 # Environment
 .env
 .env.local
+.streamlit/secrets.toml
 
 # Output
 output/
@@ -56,3 +57,4 @@ Thumbs.db
 
 
 
+DeepSeek-OCR/

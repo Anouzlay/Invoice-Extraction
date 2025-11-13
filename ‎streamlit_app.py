@@ -17,7 +17,7 @@ try:
     else:
         st.error("⚠️ OPENAI_API_KEY not found in Streamlit secrets. Please add it in your app settings.")
         st.stop()
-except (AttributeError, KeyError):
+except (AttributeError, KeyError, FileNotFoundError):
     # Streamlit secrets not available - this should only happen in local dev
     # Will fall back to .env file in crew.py for local development
     pass
@@ -336,7 +336,7 @@ def main() -> None:
         header_left, header_right = st.columns([1, 4])
         with header_left:
             if LOGO_PATH.exists():
-                st.image(str(LOGO_PATH), use_column_width=False, width=110)
+                st.image(str(LOGO_PATH), use_container_width=False, width=110)
             else:
                 st.markdown("### SIGVARIS GROUP")
         with header_right:
