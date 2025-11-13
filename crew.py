@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import yaml
 import os
+from pathlib import Path
 
 # Only load .env file if OPENAI_API_KEY is not already set
 # On Streamlit Cloud, streamlit_app.py sets it from secrets before importing this module
@@ -14,14 +15,18 @@ from agent.tools.vendor_master_lookup import VendorMasterLookup
 from agent.tools.cost_category_lookup import CostCategoryLookup
 from agent.tools.vat_calculator import VATCalculator
 
-# Instantiate tools with their BaseTool "config" fields
+# Get base directory for deployment-safe paths
+BASE_DIR = Path(__file__).resolve().parent
+
+# Instantiate tools with their BaseTool "config" fields using absolute paths
 pdf_tool = PdfExtractorFitz(max_pages=0)  
-master_tool = VendorMasterLookup(master_path="knowledge/Vendor-Master_20251030_total.xlsx", min_score=0.82)
-cost_category_tool = CostCategoryLookup(allocation_path="knowledge/Vendor_Cost-Category-Allocation_V20251031.xlsx")
+master_tool = VendorMasterLookup(master_path=str(BASE_DIR / "knowledge" / "Vendor-Master_20251030_total.xlsx"), min_score=0.82)
+cost_category_tool = CostCategoryLookup(allocation_path=str(BASE_DIR / "knowledge" / "Vendor_Cost-Category-Allocation_V20251031.xlsx"))
 vat_calculator_tool = VATCalculator()
 
-# Load agents from YAML
-with open("agent/config/agent.yaml", "r", encoding="utf-8") as f:
+# Load agents from YAML using absolute path
+agent_config_path = BASE_DIR / "agent" / "config" / "agent.yaml"
+with open(agent_config_path, "r", encoding="utf-8") as f:
     agents_data = yaml.safe_load(f)
 
 agents = []
@@ -55,8 +60,9 @@ for agent_data in agents_data["agents"]:
     agents.append(agent)
     agents_by_name[agent_data["name"]] = agent  # Store mapping
 
-# Load tasks from YAML
-with open("agent/config/tasks.yaml", "r", encoding="utf-8") as f:
+# Load tasks from YAML using absolute path
+tasks_config_path = BASE_DIR / "agent" / "config" / "tasks.yaml"
+with open(tasks_config_path, "r", encoding="utf-8") as f:
     tasks_data = yaml.safe_load(f)
 
 tasks = []
