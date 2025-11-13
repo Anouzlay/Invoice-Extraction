@@ -162,16 +162,6 @@ def _display_result_history(records: Iterable[dict[str, Any]]) -> None:
         if badge not in keyword_badges:
             keyword_badges.append(badge)
 
-    column_config: dict[str, Any] = {}
-    if "invoice_date" in data_frame.columns:
-        column_config[humanized_headers["invoice_date"]] = st.column_config.DateColumn(
-            "Invoice Date", format="YYYY-MM-DD"
-        )
-    if "due_date" in data_frame.columns:
-        column_config[humanized_headers["due_date"]] = st.column_config.DateColumn(
-            "Due Date", format="YYYY-MM-DD"
-        )
-
     st.markdown('<div class="card results-card">', unsafe_allow_html=True)
     st.markdown("#### Extraction history (current session)")
     if keyword_badges:
@@ -179,13 +169,7 @@ def _display_result_history(records: Iterable[dict[str, Any]]) -> None:
             f'<div class="keyword-panel">{"".join(keyword_badges)}</div>',
             unsafe_allow_html=True,
         )
-    table_height = max(300, min(600, 140 + len(display_df) * 48))
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        height=table_height,
-        column_config=column_config,
-    )
+    st.table(display_df)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
