@@ -12,12 +12,27 @@ import streamlit as st
 # Set OpenAI API key from Streamlit secrets before importing crew
 # This ensures secrets are used on Streamlit Cloud instead of .env files
 try:
-    if "OPENAI_API_KEY" in st.secrets:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-    else:
-        st.error("⚠️ OPENAI_API_KEY not found in Streamlit secrets. Please add it in your app settings.")
-        st.stop()
-except (AttributeError, KeyError, FileNotFoundError):
+    # On Streamlit Cloud, secrets can be accessed as attributes or dictionary keys
+    # Try attribute access first (most common on Streamlit Cloud)
+    if hasattr(st, "secrets"):
+        try:
+            # Try attribute-style access (st.secrets.OPENAI_API_KEY)
+            api_key = st.secrets.OPENAI_API_KEY
+            if api_key:
+                os.environ["OPENAI_API_KEY"] = str(api_key)
+        except (AttributeError, KeyError):
+            # Fallback to dictionary-style access (st.secrets["OPENAI_API_KEY"])
+            try:
+                api_key = st.secrets["OPENAI_API_KEY"]
+                if api_key:
+                    os.environ["OPENAI_API_KEY"] = str(api_key)
+            except (KeyError, TypeError):
+                # Secret not found - show error on Streamlit Cloud
+                st.error("⚠️ OPENAI_API_KEY not found in Streamlit secrets. Please add it in your app settings.")
+                st.error("💡 Make sure your secrets are formatted correctly in TOML format:")
+                st.code('OPENAI_API_KEY = "your-api-key-here"', language="toml")
+                st.stop()
+except Exception:
     # Streamlit secrets not available - this should only happen in local dev
     # Will fall back to .env file in crew.py for local development
     pass
