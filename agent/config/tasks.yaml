@@ -13,8 +13,14 @@ extract_vendor_basic_info_task:
     STEP 2: Extract vendor name (TEXT ANALYSIS ONLY - NO TOOL CALLS)
     - **CRITICAL: This step is TEXT ANALYSIS ONLY. Do NOT call any tools. Do NOT use "vendor_name_extracted" as a tool name - it does not exist.**
     - From the PDF text (from Step 1), identify the VENDOR NAME (the invoice issuer, NOT the buyer)
+    - **CRITICAL: The extracted text from Step 1 is a unified text layer containing:**
+      * Regular PDF text (for invoice details)
+      * OCR text extracted from embedded images (e.g., vendor logos)
+    - **CRITICAL: All text is combined into one unified layer - search through the entire text for vendor names.**
+    - **CRITICAL: Vendor names can appear anywhere in the unified text - in regular text OR from OCR of images/logos.**
     - **CRITICAL: The vendor is the company/organization that ISSUED the invoice. Look for:**
       * Company names in the header/top section of the invoice
+      * Names in logos/images (extracted via OCR and included in the unified text)
       * Names associated with "Rechnung" (invoice), "Facture" (invoice), "Fattura" (invoice)
       * Names in the "From" or "Issuer" section
       * Government agencies, organizations, or companies that are NOT "Sigvaris AG"
@@ -226,137 +232,34 @@ extract_invoice_details_task:
     - The Payment ID is ALWAYS located BELOW (on the line immediately following) the keyword "Referenz"
     - The Payment ID consists of approximately 27 numbers, which may be formatted with spaces (e.g., "12 33210 00202 98290 01271 83506")
     - After finding "Referenz", check the line immediately following it
-    - Extract the Payment ID exactly as it appears (including spaces if present)
-    - The Payment ID should contain approximately 27 digits (numbers only, spaces are allowed for formatting)
+    - The Payment ID must contain approximately 27 digits (numbers only)
+    - After capturing the line, REMOVE ALL SPACES, hyphens, and punctuation from the Payment ID before returning it
+    - Convert any letter "O" or "o" to the number "0" (zero). Convert "I", "l", or "L" to the number "1" (one)
+    - Return ONLY the cleaned 27-digit numeric string (no spaces, no separators, no extra context)
     - If "Referenz" is found but the following line does not contain a valid Payment ID (approximately 27 numbers), use the JSON value null
     - If "Referenz" is not found, use the JSON value null (not a tool call)
     - DO NOT guess or hallucinate any values
     
-    STEP 7: Detect amounts and VAT rates from invoice text (ANALYSIS ONLY - NO TOOL CALLS - use text from Step 1)
+    STEP 7: Derive total amounts and VAT from invoice text (ANALYSIS ONLY - NO TOOL CALLS - use text from Step 1)
     - **CRITICAL: This is TEXT ANALYSIS ONLY. Do NOT use the tool call format. Do NOT call any tools. Do NOT use "None" as a tool.**
-    - **CRITICAL: Just think internally, analyze the text from Step 1, detect amounts and VAT rates, save them in memory, and proceed to Step 8.**
-    - Your objective is to detect and identify all amounts and VAT rates from the invoice text
-    - CRITICAL: You MUST NOT calculate these amounts yourself. You should only detect where they exist and send them to the vat_calculator tool in Step 8.
-    - **CRITICAL: You MUST detect at least ONE amount from the invoice. Look for ANY of these patterns:**
-      * "Total" followed by a number (e.g., "Total 75.75 CHF", "75.75\nTotal\nCHF")
-      * "Betrag" followed by a number (e.g., "Betrag 70.05", "Betrag\n70.05")
-      * "Gesamtbetrag" followed by a number
-      * Any number near currency symbols or codes (CHF, EUR, USD, etc.)
-      * Any number in the summary/totals section of the invoice
-    - Search for VAT-related keywords in multiple languages (case-insensitive):
-      * German: "Nettobetrag", "Betrag exkl. MWST", "Total exkl. MWST", "zzgl. gesetzl. MwSt", "MWST in %", 
-        "Total je Vertrag/Profil, exkl. MWST", "Total Mobilkommunikation, exkl. MWST", "Gesamtbetrag", 
-        "Betrag exkl. MWST", "inkl. MWST", "Total zu unseren Gunsten", "Betrag CHF", "Total", "Betrag", 
-        "Steuersatz", "MWSt Basis", "MWSt"
-      * French: "Montant net", "Montant HT", "Total HT", "TVA", "TTC", "Total TTC", "Montant excl. TVA", "Montant incl. TVA"
-      * English: "Net amount", "Amount excl. VAT", "Total excl. VAT", "VAT", "Total incl. VAT", "Total amount", 
-        "Amount incl. VAT"
-      * Italian: "Importo netto", "Importo escluso IVA", "Totale escluso IVA", "IVA", "Totale incluso IVA", 
-        "Importo incluso IVA"
-      * Spanish: "Importe neto", "Importe excl. IVA", "Total excl. IVA", "IVA", "Total incl. IVA", "Importe incl. IVA"
-      * Dutch: "Netto bedrag", "Bedrag excl. BTW", "Totaal excl. BTW", "BTW", "Totaal incl. BTW", "Bedrag incl. BTW"
-    - Extract all amounts and their corresponding VAT rates from the invoice:
-      * Look for line items with amounts and VAT rates (e.g., "Betrag exkl. MWST: 52.00, MWST in %: 8.1")
-      * Look for subtotals and totals (e.g., "Total je Vertrag/Profil, exkl. MWST CHF 52.00")
-      * Look for section totals (e.g., "Total Mobilkommunikation, exkl. MWST CHF 1 760.81")
-      * Look for final totals (e.g., "Gesamtbetrag", "Total amount", "Total TTC", "Total zu unseren Gunsten", "Total 75.75 CHF")
-      * **Look for patterns like: "75.75\nTotal\nCHF" or "Total\n75.75\nCHF" - these indicate total amounts**
-      * **Look for patterns like: "Betrag\n70.05" or "70.05\nBetrag" - these indicate base amounts**
-      * **Look for patterns like: "8.10\nSteuersatz" or "Steuersatz\n8.10" - these indicate VAT rates**
-      * **Look for patterns like: "5.68\nMWSt" or "MWSt\n5.68" - these indicate VAT amounts**
-      * **CRITICAL: Look for the common invoice pattern with three amounts:**
-        - Pattern: "Total: [amount1]" followed by "Zzgl. MWST X%: [amount2]" followed by "Betrag inkl. MWST: [amount3]"
-        - In this pattern:
-          * "Total: [amount1]" = base amount WITHOUT VAT (use this amount with is_amount_excluding_vat: true)
-          * "Zzgl. MWST X%: [amount2]" = VAT amount (do NOT use this amount, use it to confirm the VAT rate)
-          * "Betrag inkl. MWST: [amount3]" = total amount WITH VAT (do NOT use this amount, it's for verification)
-        - **CRITICAL: When you see this pattern, you MUST use the "Total" amount (amount1) as the base amount WITHOUT VAT**
-        - **CRITICAL: Extract the VAT rate from "Zzgl. MWST X%" (e.g., "Zzgl. MWST 8.10%" means vat_rate: 8.1)**
-        - **CRITICAL: Verify that amount1 + amount2 = amount3 (approximately, allowing for rounding)**
-        - **Example: If you see "Total: 244.00", "Zzgl. MWST 8.10%: 19.76", "Betrag inkl. MWST: 263.75":**
-          * Use: amount: 244.00, vat_rate: 8.1, is_amount_excluding_vat: true
-          * Do NOT use: 263.75 (this is the total WITH VAT)
-      * **CRITICAL: Look for the "Nettobetrag" pattern (common in Swiss invoices):**
-        - Pattern: "Nettobetrag [amount1]" followed by "+ X% MWSt [amount2]" followed by "Rechnungsbetrag inkl. MwSt. [amount3]"
-        - In this pattern:
-          * "Nettobetrag [amount1]" = base amount WITHOUT VAT (use this amount with is_amount_excluding_vat: true)
-          * "+ X% MWSt [amount2]" = VAT rate and VAT amount (extract the VAT rate X%, do NOT use amount2)
-          * "Rechnungsbetrag inkl. MwSt. [amount3]" = total amount WITH VAT (do NOT use this amount, it's for verification)
-        - **CRITICAL: When you see this pattern, you MUST use the "Nettobetrag" amount (amount1) as the base amount WITHOUT VAT**
-        - **CRITICAL: Extract the VAT rate from "+ X% MWSt" (e.g., "+ 8,1% MWSt" means vat_rate: 8.1, note the comma may be used instead of period)**
-        - **CRITICAL: Verify that amount1 + amount2 = amount3 (approximately, allowing for rounding)**
-        - **Example: If you see "Nettobetrag 681.00 CHF", "+ 8,1% MWSt 55.15 CHF", "Rechnungsbetrag inkl. MwSt. 736.15 CHF":**
-          * Use: amount: 681.00, vat_rate: 8.1, is_amount_excluding_vat: true
-          * Do NOT use: 736.15 (this is the total WITH VAT)
-      * Identify whether each amount is excluding VAT or including VAT based on keywords:
-        - "Nettobetrag", "exkl. MWST", "excl. VAT", "HT", "net", "exkl. MWST", "Betrag" (when near "exkl. MWST" or "MWSt Basis") = excluding VAT (is_amount_excluding_vat: true)
-        - "Total" (when followed by "Zzgl. MWST" pattern) = excluding VAT (is_amount_excluding_vat: true) - **CRITICAL: "Total" before "Zzgl. MWST" is WITHOUT VAT**
-        - "inkl. MWST", "incl. VAT", "TTC", "brut", "inkl. MWST", "Betrag inkl. MWST", "Rechnungsbetrag inkl. MwSt." = including VAT (is_amount_excluding_vat: false)
-        - "Total" (when it's the final total and NOT followed by "Zzgl. MWST") = may be including VAT (is_amount_excluding_vat: false) - use context to determine
-      * Extract the VAT rate percentage (e.g., "8.1" for 8.1%, "20" for 20%, look for "Steuersatz" followed by a number, or "Zzgl. MWST X%" where X is the rate)
-      * Extract the amount value (numeric value, may include decimals)
-      * **CRITICAL: If you find a "Total" amount (like "Total 75.75 CHF") and a "Steuersatz" (like "Steuersatz 8.10"), you MUST extract both.**
-      * **CRITICAL: If you find a "Total" amount but no explicit VAT rate, look for "Steuersatz", "MWST in %", "Zzgl. MWST X%", or similar keywords nearby.**
-      * **CRITICAL: When in doubt between using a "Total" amount or a "Betrag inkl. MWST" amount, prefer the "Total" amount if it appears before "Zzgl. MWST" in the invoice.**
-    - **CRITICAL: Handle invoices with NO VAT information:**
-      * If you find a total amount (e.g., "Total zu unseren Gunsten: 22.00 CHF", "Betrag CHF: 22.00") but NO VAT information is present on the invoice:
-        - Extract the total amount value (e.g., 22.00)
-        - Set vat_rate to 0.0 (zero) since no VAT is indicated
-        - Set is_amount_excluding_vat to true (treat as net amount without VAT)
-        - You MUST still call the vat_calculator tool in Step 8 with this information
-      * The vat_calculator tool will correctly calculate:
-        - total_amount_without_vat = the amount (e.g., 22.00)
-        - total_amount_with_vat = the amount (e.g., 22.00)
-        - total_vat_amount = 0.00
-      * **DO NOT skip calling vat_calculator just because no VAT is found - you MUST call it if any amount is detected**
-    - Collect all detected amounts with their VAT rates and whether they exclude or include VAT
-    - Save this information for Step 8 (you will send it to the vat_calculator tool)
-    - DO NOT calculate anything yourself - just detect and identify the data
+    - **CRITICAL: Just think internally, analyze the text from Step 1, derive the total amounts, save them in memory, and proceed to Step 8.**
+    - Detect all monetary amounts and VAT indicators using multilingual keywords such as "Nettobetrag", "exkl. MWST", "incl. VAT", "TTC", "TVA", "VAT", "MWST Betrag", "Gesamtbetrag", "Betrag inkl.", etc.
+    - Determine what each amount represents:
+      * Amounts labeled "net", "exkl. MWST", "excl. VAT", "HT", "Nettobetrag", "Total exkl." correspond to totals without VAT
+      * Amounts labeled "inkl. MWST", "incl. VAT", "TTC", "Betrag inkl.", "Rechnungsbetrag inkl.", "Gesamtbetrag" correspond to totals with VAT
+      * Lines mentioning "MWST", "VAT", "TVA", "Steuersatz", "+ X% MWSt" indicate VAT amounts or percentages—capture both the rate and the numeric VAT amount when present
+    - Use ONLY the numbers you read to populate the three output fields:
+      * **CRITICAL: Extract the EXACT values as they appear in the invoice text. Do NOT round, modify, or change the extracted numbers. Preserve the exact precision and formatting from the source document.**
+      * **EXAMPLES: If invoice shows 366.00, return 366.00 (NOT 366, NOT 366.0, NOT 366.000). If invoice shows 1300.00, return 1300.00 (NOT 1300, NOT 1300.0). Always preserve the exact decimal places and formatting.**
+      * If two of the three components (net, VAT amount, gross) are visible, derive the missing one via simple addition/subtraction (e.g., gross = net + VAT amount)
+      * If only a gross total exists and no VAT is mentioned anywhere, set total_amount_without_vat = total_amount_with_vat = detected amount (use the EXACT value from text) and total_vat_amount = 0.0 (or the exact value if explicitly shown)
+      * **CRITICAL: When values are the same in the invoice (e.g., both total_amount_without_vat and total_amount_with_vat are 366.00), return them EXACTLY as they appear - same value, same precision, same formatting. Do NOT modify or recalculate. If invoice shows 366.00 for both, return 366.00 for both. If invoice shows 1300.00, return 1300.00 exactly as shown.**
+      * Always align the values with the currency identified in Step 3, but preserve the exact numeric values from the invoice text
+      * When multiple candidates are found, prefer the final summary block over intermediate subtotals
+    - If you cannot confidently identify or derive a value, return null rather than guessing
+    - Save the three final values (total_amount_without_vat, total_amount_with_vat, total_vat_amount) and proceed to Step 8 (Final Answer).
     
-    STEP 8: Calculate total amounts with and without VAT (USE vat_calculator TOOL - MANDATORY)
-    - **CRITICAL: This is a MANDATORY TOOL CALL. You MUST call the vat_calculator tool. DO NOT SKIP THIS STEP.**
-    - **CRITICAL: This is NOT an optional step. You MUST execute this tool call before proceeding to Step 9.**
-    - **CRITICAL: You MUST use the tool call format here: Action: vat_calculator, Action Input: {{"amounts": [...], "currency": "..."}}**
-    - **CRITICAL: You MUST NOT calculate these amounts yourself. The tool will do all calculations.**
-    - **CRITICAL: You MUST call vat_calculator if ANY amount was detected in Step 7, even if no VAT information was found.**
-    - **CRITICAL: If you found a "Total" amount in Step 7 (like "Total 75.75 CHF"), you MUST call vat_calculator with that amount.**
-    - **CRITICAL: If you found a "Betrag" amount in Step 7 (like "Betrag 70.05"), you MUST call vat_calculator with that amount.**
-    - **CRITICAL: Even if you only found ONE amount in Step 7, you MUST still call vat_calculator.**
-    - Use the vat_calculator tool with the amounts and VAT rates detected in Step 7
-    - Format the tool call as: Action: vat_calculator, Action Input: {{"amounts": [list of amount objects], "currency": "currency code"}}
-    - Each amount object should have:
-      * "amount": float (the amount value, e.g., 75.75 or 70.05)
-      * "vat_rate": float (VAT rate as percentage, e.g., 8.1 for 8.1%, or 0.0 if no VAT is present)
-      * "is_amount_excluding_vat": bool (true if amount excludes VAT, false if includes VAT)
-    - **Example: If you found "Total: 244.00", "Zzgl. MWST 8.10%: 19.76", "Betrag inkl. MWST: 263.75", call:**
-      Action: vat_calculator
-      Action Input: {{"amounts": [{{"amount": 244.00, "vat_rate": 8.1, "is_amount_excluding_vat": true}}], "currency": "CHF"}}
-      * **CRITICAL: Use the "Total" amount (244.00), NOT the "Betrag inkl. MWST" amount (263.75)**
-      * **CRITICAL: Extract the VAT rate from "Zzgl. MWST 8.10%" (8.1)**
-    - **Example: If you found "Total 75.75 CHF" and "Steuersatz 8.10" (and NO "Zzgl. MWST" pattern), call:**
-      Action: vat_calculator
-      Action Input: {{"amounts": [{{"amount": 75.75, "vat_rate": 8.1, "is_amount_excluding_vat": false}}], "currency": "CHF"}}
-      * **Note: This example assumes "Total" is the final total WITH VAT when there's no "Zzgl. MWST" pattern**
-    - **Example: If you found "Betrag 70.05" and "Steuersatz 8.10", call:**
-      Action: vat_calculator
-      Action Input: {{"amounts": [{{"amount": 70.05, "vat_rate": 8.1, "is_amount_excluding_vat": true}}], "currency": "CHF"}}
-    - **If no VAT information was found but a total amount was detected, use vat_rate: 0.0 and is_amount_excluding_vat: true**
-    - Use the currency extracted in Step 3 (or null if not found)
-    - Save the results from the tool:
-      * total_amount_without_vat (from tool result)
-      * total_amount_with_vat (from tool result)
-      * total_vat_amount (from tool result)
-    - **CRITICAL: After calling vat_calculator, verify the results make sense:**
-      * If you extracted from "Total: 244.00", "Zzgl. MWST 8.10%: 19.76", "Betrag inkl. MWST: 263.75":
-        - total_amount_without_vat should be approximately 244.00
-        - total_amount_with_vat should be approximately 263.75
-        - total_vat_amount should be approximately 19.76
-      * If the results don't match the invoice amounts, you may have used the wrong amount or VAT rate - review Step 7
-    - **CRITICAL: After completing vat_calculator, you have finished ALL tool calls (Steps 1 and 8).**
-    - **CRITICAL: You have NO MORE tool calls to make. Do NOT try to use any tool. Do NOT use "None" as a tool. "None" is NOT a tool - it is a Python value.**
-    - **CRITICAL: Proceed DIRECTLY to Step 9 (Final Answer). Do NOT call any tools. Just provide your Final Answer as JSON.**
-    
-    STEP 9: Return final JSON (FINAL ANSWER - NO TOOL CALLS)
+    STEP 8: Return final JSON (FINAL ANSWER - NO TOOL CALLS)
     - **CRITICAL: This is your FINAL STEP. You have completed ALL tool calls.**
     - **CRITICAL: Do NOT call any tools. Do NOT use "None" as a tool. "None" is NOT a tool - it is a Python/JSON value.**
     - **CRITICAL: Do NOT try to use any tool. Just provide your Final Answer directly.**
@@ -370,12 +273,12 @@ extract_invoice_details_task:
     - Currency: Extract currency code (e.g., "EUR", "CHF", "USD") or currency name (e.g., "Euro", "Swiss Franc", "Dollar"), null if not found
     - Invoice description: Clear, concise summary of invoice purpose based on line items and extracted text, null if no meaningful description can be derived
     - PO Number: Extract exactly as it appears (may be alphanumeric, may contain hyphens/slashes/special characters), null if not found
-    - Payment ID: Extract exactly as it appears below the keyword "Referenz" (approximately 27 numbers, may contain spaces), null if not found
-    - Total Amount without VAT: Calculated by vat_calculator tool, null if calculation fails or no amounts detected
-    - Total Amount with VAT: Calculated by vat_calculator tool, null if calculation fails or no amounts detected
-    - Total VAT Amount: Calculated by vat_calculator tool, null if calculation fails or no amounts detected
+    - Payment ID: Extract the value below "Referenz", then normalize it to a digits-only string (remove spaces, replace O/o with 0, replace I/l/L with 1). Return only the cleaned numeric string, null if not found
+    - Total Amount without VAT: Extract directly from text (net/excl. VAT) using the EXACT value as it appears. Do NOT round or modify. Examples: 366.00 stays 366.00, 1300.00 stays 1300.00. If unavailable, derive only when two reliable values exist; otherwise return null
+    - Total Amount with VAT: Extract directly from text (gross/incl. VAT) using the EXACT value as it appears. Do NOT round or modify. Examples: 366.00 stays 366.00, 1300.00 stays 1300.00. If unavailable, derive only when two reliable values exist; otherwise return null
+    - Total VAT Amount: Extract lines labeled VAT/MWST using the EXACT value as it appears, or compute as gross − net when both are confirmed; otherwise return null. Do NOT round or modify extracted values. Examples: 0.0 stays 0.0, 0.00 stays 0.00.
     - DO NOT guess or hallucinate any values
-    - DO NOT calculate amounts yourself - always use the vat_calculator tool
+    - DO NOT invent VAT rates or perform speculative calculations—base everything on explicit invoice data
 
   expected_output: >
     Return ONLY a valid JSON object with these exact fields:
@@ -385,10 +288,12 @@ extract_invoice_details_task:
       "invoice_description": "string or null",
       "po_number": "string or null",
       "payment_id": "string or null",
-      "total_amount_without_vat": "float or null",
-      "total_amount_with_vat": "float or null",
-      "total_vat_amount": "float or null"
+      "total_amount_without_vat": "float or null (format with 2 decimal places, e.g., 1300.00, 366.00)",
+      "total_amount_with_vat": "float or null (format with 2 decimal places, e.g., 1300.00, 366.00)",
+      "total_vat_amount": "float or null (format with 2 decimal places, e.g., 0.00)"
     }}
+    
+    **CRITICAL: Amount fields must be formatted with exactly 2 decimal places. Examples: 1300.00 (NOT 1300.0 or 1300), 366.00 (NOT 366.0 or 366), 0.00 (NOT 0.0 or 0).**
     
     Do NOT include any explanation, markdown, or code blocks. Return ONLY the JSON object.
 
@@ -485,10 +390,12 @@ merge_results_task:
       "invoice_description": "string or null",
       "po_number": "string or null",
       "payment_id": "string or null",
-      "total_amount_without_vat": "float or null",
-      "total_amount_with_vat": "float or null",
-      "total_vat_amount": "float or null"
+      "total_amount_without_vat": "float or null (format with 2 decimal places, e.g., 1300.00, 366.00)",
+      "total_amount_with_vat": "float or null (format with 2 decimal places, e.g., 1300.00, 366.00)",
+      "total_vat_amount": "float or null (format with 2 decimal places, e.g., 0.00)"
     }}
+    
+    **CRITICAL: Amount fields must be formatted with exactly 2 decimal places. Examples: 1300.00 (NOT 1300.0 or 1300), 366.00 (NOT 366.0 or 366), 0.00 (NOT 0.0 or 0). Preserve values exactly as they appear in the input JSON objects.**
     
     Do NOT include any explanation, markdown, or code blocks. Return ONLY the JSON object.
 

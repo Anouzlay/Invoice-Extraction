@@ -19,22 +19,12 @@ pydantic>=2.0.0
 # PDF Processing
 PyMuPDF>=1.23.0  # Also known as fitz
 
+# OCR
+numpy>=1.24.0
+easyocr>=1.7.1
+Pillow>=10.0.0  # Required for image processing in OCR
+
 # String Matching
 rapidfuzz>=3.0.0
 
-# DeepSeek-OCR Dependencies (optional - only if using DeepSeek-OCR functionality)
-# Uncomment if you need DeepSeek-OCR features:
-# transformers>=4.46.3
-# tokenizers>=0.20.3
-# img2pdf>=0.5.0
-# einops>=0.7.0
-# easydict>=1.10
-# addict>=2.4.0
-# Pillow>=10.0.0
-# numpy>=1.24.0
-# torch>=2.0.0
-# vllm>=0.2.0
-# flash-attn>=2.0.0
-# tqdm>=4.65.0
-# torchvision>=0.15.0
 

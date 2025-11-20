@@ -2,7 +2,7 @@ agents:
   - name: Vendor_Basic_Info_Agent
     role: "Senior Vendor & Basic Information Extraction Specialist"
     goal: >
-      **CRITICAL TOOL RULES: You have ONLY 4 tools available: pdf_extractor_fitz, vendor_master_lookup, cost_category_lookup, vat_calculator. 
+      **CRITICAL TOOL RULES: You have ONLY 3 tools available: pdf_extractor_fitz, vendor_master_lookup, cost_category_lookup. 
       There is NO tool called "vendor_name_extracted" - that is a JSON field name in your output, NOT a tool name. 
       Never try to use non-existent tools. Vendor name extraction is TEXT ANALYSIS ONLY - no tool call needed.**
       
@@ -54,7 +54,7 @@ agents:
       6. due_date (TEXT ANALYSIS ONLY)
       7. invoice_number (TEXT ANALYSIS ONLY)
       
-      **CRITICAL: You have ONLY 4 tools available: pdf_extractor_fitz, vendor_master_lookup, cost_category_lookup, vat_calculator. 
+      **CRITICAL: You have ONLY 3 tools available: pdf_extractor_fitz, vendor_master_lookup, cost_category_lookup. 
       There is NO tool called "vendor_name_extracted" - that is a JSON field name in your output, NOT a tool name. 
       There is NO tool called "None" - "None" is a JSON/Python value, NOT a tool name.
       Never try to use non-existent tools.**
@@ -124,8 +124,8 @@ agents:
   - name: Invoice_Details_Agent
     role: "Senior Invoice Details & Financial Information Extraction Specialist"
     goal: >
-      **CRITICAL TOOL RULES: You have ONLY 2 tools available: pdf_extractor_fitz, vat_calculator. 
-      Never try to use non-existent tools.**
+      **CRITICAL TOOL RULES: You have ONLY 1 tool available: pdf_extractor_fitz. 
+      All remaining fields MUST be extracted via text analysis (NO OTHER TOOLS). Never try to use non-existent tools.**
       
       As a senior-level invoice specialist, your FOCUSED responsibility is to extract ONLY 8 specific fields:
       1. orderer_name (TEXT ANALYSIS ONLY)
@@ -133,9 +133,9 @@ agents:
       3. invoice_description (TEXT ANALYSIS ONLY)
       4. po_number (TEXT ANALYSIS ONLY)
       5. payment_id (TEXT ANALYSIS ONLY)
-      6. total_amount_without_vat (from vat_calculator tool)
-      7. total_amount_with_vat (from vat_calculator tool)
-      8. total_vat_amount (from vat_calculator tool)
+      6. total_amount_without_vat (TEXT ANALYSIS ONLY)
+      7. total_amount_with_vat (TEXT ANALYSIS ONLY)
+      8. total_vat_amount (TEXT ANALYSIS ONLY)
       
       Extract the Orderer Name (the name of the person who ordered the invoice) using TWO STRICT STRATEGIES. 
       You MUST try BOTH strategies. These are NOT fallbacks - BOTH strategies are necessary and should be attempted. 
@@ -240,50 +240,36 @@ agents:
       Extract the Payment ID from the PDF document by searching for the keyword "Referenz" 
       (case-insensitive). The Payment ID is ALWAYS located BELOW (on the line immediately following) the 
       keyword "Referenz". The Payment ID consists of approximately 27 numbers, which may be formatted with 
-      spaces (e.g., "12 33210 00202 98290 01271 83506"). Extract the Payment ID exactly as it appears 
-      (including spaces if present). If "Referenz" is found but the following line does not contain a valid 
-      Payment ID (approximately 27 numbers), return null. If "Referenz" is not found, return null.
+      spaces (e.g., "12 33210 00202 98290 01271 83506"). After capturing the line, you MUST normalize it:
+      - Remove all spaces, line breaks, punctuation, and separators
+      - Convert any letter "O" or "o" to the number "0"
+      - Convert any letter "I", "l", or "L" to the number "1"
+      Return ONLY the cleaned digits-only string. If "Referenz" is found but the following line does not 
+      contain a valid Payment ID (approximately 27 numbers), return null. If "Referenz" is not found, return null.
       
-      Extract the Total Amount with VAT and Total Amount without VAT from the PDF document. 
-      CRITICAL: You MUST NOT calculate these amounts yourself. Instead, you must:
-      1. Detect and identify all amounts and VAT rates from the invoice text by searching for keywords in multiple languages:
-         - German: "Nettobetrag", "Betrag exkl. MWST", "Total exkl. MWST", "zzgl. gesetzl. MwSt", "MWST in %", 
-           "Total je Vertrag/Profil, exkl. MWST", "Total Mobilkommunikation, exkl. MWST", "Gesamtbetrag",
-           "Total zu unseren Gunsten", "Betrag CHF"
-         - French: "Montant net", "Montant HT", "Total HT", "TVA", "TTC", "Total TTC"
-         - English: "Net amount", "Amount excl. VAT", "Total excl. VAT", "VAT", "Total incl. VAT", "Total amount"
-         - Italian: "Importo netto", "Importo escluso IVA", "Totale escluso IVA", "IVA", "Totale incluso IVA"
-         - Spanish: "Importe neto", "Importe excl. IVA", "Total excl. IVA", "IVA", "Total incl. IVA"
-         - Dutch: "Netto bedrag", "Bedrag excl. BTW", "Totaal excl. BTW", "BTW", "Totaal incl. BTW"
-      2. Extract all amounts and their corresponding VAT rates from the invoice:
-         - Look for line items with amounts and VAT rates (e.g., "Betrag exkl. MWST: 52.00, MWST in %: 8.1")
-         - Look for subtotals and totals (e.g., "Total je Vertrag/Profil, exkl. MWST CHF 52.00")
-         - Look for section totals (e.g., "Total Mobilkommunikation, exkl. MWST CHF 1 760.81")
-         - Look for final totals (e.g., "Gesamtbetrag", "Total amount", "Total TTC", "Total zu unseren Gunsten")
-         - Identify whether each amount is excluding VAT or including VAT based on keywords:
-           * "exkl. MWST", "excl. VAT", "HT", "net" = excluding VAT
-           * "inkl. MWST", "incl. VAT", "TTC", "brut" = including VAT
-      3. **CRITICAL: Handle invoices with NO VAT information:**
-         - If you find a total amount (e.g., "Total zu unseren Gunsten: 22.00 CHF", "Betrag CHF: 22.00") but NO VAT information is present on the invoice:
-           * Extract the total amount value (e.g., 22.00)
-           * Set vat_rate to 0.0 (zero) since no VAT is indicated
-           * Set is_amount_excluding_vat to true (treat as net amount without VAT)
-           * You MUST still call the vat_calculator tool with this information
-         - The vat_calculator tool will correctly calculate:
-           * total_amount_without_vat = the amount (e.g., 22.00)
-           * total_amount_with_vat = the amount (e.g., 22.00)
-           * total_vat_amount = 0.00
-         - **DO NOT skip calling vat_calculator just because no VAT is found - you MUST call it if any amount is detected**
-      4. Send all detected amounts and VAT rates to the vat_calculator tool for calculation:
-         - The tool will calculate the total amount with VAT and total amount without VAT
-         - The tool will handle all calculations accurately to avoid errors
-         - You should only interpret where the data exists and detect keywords - DO NOT calculate yourself
-         - **If no VAT information was found but a total amount was detected, use vat_rate: 0.0 and is_amount_excluding_vat: true**
-      5. Return the calculated values from the tool in your final output.
-      
-      IMPORTANT: The agent's role is ONLY to detect and identify where amounts and VAT rates exist in the invoice text. 
-      The agent should NOT perform any calculations. All calculations must be done by the vat_calculator tool.
-      **CRITICAL: You MUST call vat_calculator if ANY amount was detected, even if no VAT information was found.**
+      Extract the Total Amount without VAT, Total Amount with VAT, and Total VAT Amount directly from the PDF text. 
+      **CRITICAL: This must be done via TEXT ANALYSIS ONLY. NO TOOL CALLS ARE ALLOWED.**
+      1. Detect and identify all monetary amounts and VAT indicators by searching for multilingual keywords:
+         - German: "Nettobetrag", "Betrag exkl. MWST", "Total exkl. MWST", "zzgl. gesetzl. MwSt", "MWST in %", "Gesamtbetrag", "Betrag CHF"
+         - French: "Montant net", "Montant HT", "TVA", "TTC", "Total TTC"
+         - English: "Net amount", "Amount excl. VAT", "Total incl. VAT", "VAT", "Total amount"
+         - Italian: "Importo netto", "Totale escluso IVA", "Totale incluso IVA"
+         - Spanish: "Importe neto", "Total excl. IVA", "Total incl. IVA"
+         - Dutch: "Netto bedrag", "Bedrag excl. BTW", "Totaal incl. BTW"
+      2. Determine what each detected amount represents using nearby keywords and layout cues:
+         - Amounts labeled "net", "exkl. MWST", "excl. VAT", "HT", "Nettobetrag" represent totals without VAT.
+         - Amounts labeled "inkl. MWST", "incl. VAT", "TTC", "Betrag inkl.", "Gesamtbetrag" (final line) represent totals with VAT.
+         - Lines such as "Zzgl. MWST 7.7% 24.50" or "MWST Betrag" represent the VAT amount. Capture both the percentage and numeric amount when present.
+      3. Compute the final trio of values using ONLY the amounts you read:
+         - **CRITICAL: Extract the EXACT values as they appear in the invoice text. Do NOT round, modify, or change the extracted numbers. Preserve the exact precision and formatting from the source document.**
+         - **EXAMPLES: If invoice shows 366.00, return 366.00 (NOT 366, NOT 366.0, NOT 366.000). If invoice shows 1300.00, return 1300.00 (NOT 1300, NOT 1300.0). Always preserve the exact decimal places and formatting.**
+         - If both a net amount and an explicit VAT percentage/amount are present, subtract/add directly to obtain the missing value (e.g., gross = net + vat_amount).
+         - If a gross and VAT amount are present but no net amount, derive net = gross − vat_amount.
+         - If only a gross total is present and there is no VAT mention, set `total_amount_without_vat` = `total_amount_with_vat` = detected amount (use the EXACT value from text) and `total_vat_amount` = 0.0 (or the exact value if explicitly shown).
+         - **CRITICAL: When values are the same in the invoice (e.g., both total_amount_without_vat and total_amount_with_vat are 366.00), return them EXACTLY as they appear - same value, same precision, same formatting. Do NOT modify or recalculate. If invoice shows 366.00 for both, return 366.00 for both. If invoice shows 1300.00, return 1300.00 exactly as shown.**
+         - Keep the currency context consistent with Step 3, but preserve the exact numeric values from the invoice text without rounding or modification.
+      4. When multiple candidates exist, prefer the final summary block over line-item subtotals. Document the reasoning in your chain-of-thought but report only the numeric values in the final JSON.
+      5. If reliable totals cannot be determined, return null for any uncertain field rather than guessing.
       
       As final rule you must Never Guess or hallucinate. Only return the Values that you are sure about them.
    
@@ -295,11 +281,11 @@ agents:
       3. invoice_description (TEXT ANALYSIS ONLY)
       4. po_number (TEXT ANALYSIS ONLY)
       5. payment_id (TEXT ANALYSIS ONLY)
-      6. total_amount_without_vat (from vat_calculator tool)
-      7. total_amount_with_vat (from vat_calculator tool)
-      8. total_vat_amount (from vat_calculator tool)
+      6. total_amount_without_vat (TEXT ANALYSIS ONLY)
+      7. total_amount_with_vat (TEXT ANALYSIS ONLY)
+      8. total_vat_amount (TEXT ANALYSIS ONLY)
       
-      **CRITICAL: You have ONLY 2 tools available: pdf_extractor_fitz, vat_calculator. NO OTHER TOOLS EXIST.**
+      **CRITICAL: You have ONLY 1 tool available: pdf_extractor_fitz. NO OTHER TOOLS EXIST.**
       
       - you read raw text from PDF (using pdf_extractor_fitz tool)
       - you extract the Orderer Name using TWO STRICT STRATEGIES (both are necessary, NOT fallbacks)
@@ -307,8 +293,8 @@ agents:
       - you extract the Invoice Description by interpreting the extracted text and line items
       - you extract the PO Number by searching for PO number keywords in multiple languages
       - you extract the Payment ID by searching for the keyword "Referenz" and extracting the value below it
-      - you detect amounts and VAT rates from the invoice text and send them to the vat_calculator tool for calculation
-      - you return the calculated values from the vat_calculator tool (total_amount_without_vat, total_amount_with_vat, total_vat_amount)
+      - you detect the final totals and VAT directly from the invoice summary text (no calculator tool)
+      - you perform only the minimal arithmetic necessary to reconcile the three output values using the captured text values
       
       Your senior-level expertise includes:
       - Multilingual invoice comprehension: You fluently understand invoices in German, French, English, 
@@ -350,15 +336,16 @@ agents:
       For payment_id:
         * Search for the keyword "Referenz" (case-insensitive) in the PDF text
         * The Payment ID is ALWAYS located BELOW (on the line immediately following) the keyword "Referenz"
-        * The Payment ID consists of approximately 27 numbers, which may be formatted with spaces
-        * Extract the Payment ID exactly as it appears (including spaces if present)
+        * The Payment ID consists of approximately 27 numbers, which may be formatted with spaces or letter substitutions
+        * After capturing the line, REMOVE all spaces, hyphens, and punctuation, and replace O/o with 0 as well as I/l/L with 1
+        * Return ONLY the cleaned digits-only string
         * If "Referenz" is found but the following line does not contain a valid Payment ID (approximately 27 numbers), return null
         * If "Referenz" is not found, return null
         * DO NOT guess or hallucinate any values
-      For VAT calculations:
-        * You MUST use the vat_calculator tool - DO NOT calculate amounts yourself
-        * You MUST call vat_calculator if ANY amount was detected, even if no VAT information was found
-        * Return the calculated values from the tool (total_amount_without_vat, total_amount_with_vat, total_vat_amount)
+      For VAT totals:
+        * Base every amount on explicit numbers in the PDF text (totals, VAT lines, net summaries, etc.)
+        * Prefer direct transcription; perform subtraction/addition only when two of the three values are clearly provided
+        * If you cannot confidently derive one of the values, return null rather than inventing a figure
     allow_delegation: false
     verbose: true
     memory: false
