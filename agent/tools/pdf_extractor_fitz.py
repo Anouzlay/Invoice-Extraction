@@ -224,7 +224,7 @@ class PdfExtractorFitz(BaseTool):
             # Suppress EasyOCR warnings and logging during initialization
             import warnings
             import logging
-            import sys
+            from contextlib import redirect_stderr
             from io import StringIO
             
             # Suppress EasyOCR logger warnings
@@ -232,32 +232,30 @@ class PdfExtractorFitz(BaseTool):
             old_level = easyocr_logger.level
             easyocr_logger.setLevel(logging.ERROR)
             
-            # Temporarily suppress warnings and redirect stderr
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # Redirect stderr to suppress download messages
-                old_stderr = sys.stderr
-                try:
-                    sys.stderr = StringIO()
-                    # Create the Reader - this triggers model download if not already cached
-                    reader = Reader(unique_langs, gpu=use_gpu, verbose=False)
-                    cls._ocr_clients[key] = reader
-                    
-                    # Force model download by running OCR on a tiny dummy image
-                    # This ensures models are fully downloaded and loaded into memory
-                    try:
-                        # Create a minimal 10x10 white image to trigger model loading
-                        dummy_image = np.ones((10, 10, 3), dtype=np.uint8) * 255
-                        # Run readtext to force model download and initialization
-                        reader.readtext(dummy_image, detail=0, paragraph=False)
-                    except Exception:
-                        # If dummy OCR fails, that's OK - models are still initialized
-                        # The actual OCR will work when called with real images
-                        pass
-                finally:
-                    # Restore stderr and logging level
-                    sys.stderr = old_stderr
-                    easyocr_logger.setLevel(old_level)
+            try:
+                # Temporarily suppress warnings and redirect stderr
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    # Redirect stderr to suppress download messages (safer context manager approach)
+                    with redirect_stderr(StringIO()):
+                        # Create the Reader - this triggers model download if not already cached
+                        reader = Reader(unique_langs, gpu=use_gpu, verbose=False)
+                        cls._ocr_clients[key] = reader
+                        
+                        # Force model download by running OCR on a tiny dummy image
+                        # This ensures models are fully downloaded and loaded into memory
+                        try:
+                            # Create a minimal 10x10 white image to trigger model loading
+                            dummy_image = np.ones((10, 10, 3), dtype=np.uint8) * 255
+                            # Run readtext to force model download and initialization
+                            reader.readtext(dummy_image, detail=0, paragraph=False)
+                        except Exception:
+                            # If dummy OCR fails, that's OK - models are still initialized
+                            # The actual OCR will work when called with real images
+                            pass
+            finally:
+                # Restore logging level
+                easyocr_logger.setLevel(old_level)
 
     def _perform_ocr(self, ocr_client: Any, image: Any) -> List[str]:
         """Run EasyOCR reader and return detected text lines."""

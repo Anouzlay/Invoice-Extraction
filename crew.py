@@ -45,15 +45,11 @@ pdf_tool = PdfExtractorFitz(max_pages=0)
 # This ensures models are downloaded during app startup, not during user requests
 # This is critical for deployment to avoid model downloads during user requests
 try:
-    import sys
-    print("[INIT] Pre-initializing EasyOCR models...", file=sys.stderr, flush=True)
     PdfExtractorFitz.pre_initialize_ocr(ocr_lang="en,de,fr", use_gpu=False)
-    print("[INIT] EasyOCR models pre-initialized successfully.", file=sys.stderr, flush=True)
-except Exception as e:
-    # Log but don't fail - OCR will still work, just might download models on first use
+except Exception:
+    # Silently fail - OCR will still work, just might download models on first use
     # This prevents blocking the app startup if there are network issues
-    import sys
-    print(f"[INIT] Warning: Could not pre-initialize EasyOCR: {e}", file=sys.stderr, flush=True)
+    pass
 
 master_tool = VendorMasterLookup(master_path=str(BASE_DIR / "knowledge" / "Vendor-Master_20251030_total.xlsx"), min_score=0.82)
 cost_category_tool = CostCategoryLookup(allocation_path=str(BASE_DIR / "knowledge" / "Vendor_Cost-Category-Allocation_V20251031.xlsx"))
