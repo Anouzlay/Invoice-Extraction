@@ -21,7 +21,7 @@ PyMuPDF>=1.23.0  # Also known as fitz
 
 # OCR
 numpy>=1.24.0
-easyocr>=1.7.1
+google-generativeai>=0.3.0  # Gemini Vision API for OCR
 Pillow>=10.0.0  # Required for image processing in OCR
 
 # String Matching

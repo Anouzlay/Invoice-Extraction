@@ -14,6 +14,11 @@ from dotenv import load_dotenv
 if "OPENAI_API_KEY" not in os.environ:
     load_dotenv()
 
+# Also ensure GEMINI_API_KEY is loaded from .env if not already set
+# On Streamlit Cloud, streamlit_app.py sets it from secrets before importing this module
+if "GEMINI_API_KEY" not in os.environ:
+    load_dotenv()  # This will load GEMINI_API_KEY if it exists in .env
+
 from crewai import Agent, Crew, Process, Task
 from langchain_openai import ChatOpenAI
 
