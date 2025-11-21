@@ -191,9 +191,23 @@ class PdfExtractorFitz(BaseTool):
                 "EasyOCR is not available. Install easyocr>=1.7.1 to enable OCR fallback."
             )
 
-        key = (tuple(langs), use_gpu)
+        key = (tuple(sorted(langs)), use_gpu)  # Sort langs for consistent key matching
         if key not in self.__class__._ocr_clients:
-            self.__class__._ocr_clients[key] = Reader(langs, gpu=use_gpu, verbose=False)
+            # Suppress warnings when creating new client (shouldn't happen if pre-init worked)
+            import logging
+            import warnings
+            from contextlib import redirect_stderr, redirect_stdout
+            from io import StringIO
+            
+            # Suppress EasyOCR loggers
+            for logger_name in ['easyocr', 'easyocr.easyocr']:
+                logger = logging.getLogger(logger_name)
+                logger.setLevel(logging.CRITICAL)
+            
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
+                    self.__class__._ocr_clients[key] = Reader(langs, gpu=use_gpu, verbose=False)
         return self.__class__._ocr_clients[key]
 
     @classmethod
@@ -210,7 +224,7 @@ class PdfExtractorFitz(BaseTool):
             # EasyOCR not available, skip initialization
             return
         
-        # Resolve languages
+        # Resolve languages using the EXACT same logic as _resolve_ocr_langs
         langs = [chunk.strip() for chunk in ocr_lang.split(",")]
         unique_langs: List[str] = []
         for lang in langs:
@@ -219,43 +233,60 @@ class PdfExtractorFitz(BaseTool):
         unique_langs = unique_langs or ["en"]
         
         # Initialize the client (this will download models if needed)
-        key = (tuple(unique_langs), use_gpu)
+        # Sort langs for consistent key matching with _get_ocr_client
+        key = (tuple(sorted(unique_langs)), use_gpu)
         if key not in cls._ocr_clients:
-            # Suppress EasyOCR warnings and logging during initialization
+            # Completely suppress all EasyOCR output during initialization
             import warnings
             import logging
-            from contextlib import redirect_stderr
+            import sys
+            import os
+            from contextlib import redirect_stderr, redirect_stdout
             from io import StringIO
             
-            # Suppress EasyOCR logger warnings
-            easyocr_logger = logging.getLogger("easyocr.easyocr")
-            old_level = easyocr_logger.level
-            easyocr_logger.setLevel(logging.ERROR)
+            # Set environment variable to suppress EasyOCR output
+            os.environ['EASYOCR_MODULE_PATH'] = os.environ.get('EASYOCR_MODULE_PATH', '')
+            
+            # Suppress all EasyOCR loggers
+            for logger_name in ['easyocr', 'easyocr.easyocr']:
+                logger = logging.getLogger(logger_name)
+                logger.setLevel(logging.CRITICAL)
+                logger.disabled = True
+            
+            # Suppress root logger warnings
+            root_logger = logging.getLogger()
+            old_root_level = root_logger.level
+            root_logger.setLevel(logging.CRITICAL)
             
             try:
-                # Temporarily suppress warnings and redirect stderr
+                # Suppress all warnings and redirect both stdout and stderr
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    # Redirect stderr to suppress download messages (safer context manager approach)
-                    with redirect_stderr(StringIO()):
+                    # Redirect both stdout and stderr to completely silence output
+                    with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
                         # Create the Reader - this triggers model download if not already cached
                         reader = Reader(unique_langs, gpu=use_gpu, verbose=False)
                         cls._ocr_clients[key] = reader
                         
-                        # Force model download by running OCR on a tiny dummy image
+                        # CRITICAL: Force model download by running OCR on a dummy image
                         # This ensures models are fully downloaded and loaded into memory
                         try:
                             # Create a minimal 10x10 white image to trigger model loading
                             dummy_image = np.ones((10, 10, 3), dtype=np.uint8) * 255
                             # Run readtext to force model download and initialization
+                            # This is the key step that actually downloads the models
                             reader.readtext(dummy_image, detail=0, paragraph=False)
                         except Exception:
                             # If dummy OCR fails, that's OK - models are still initialized
                             # The actual OCR will work when called with real images
                             pass
             finally:
-                # Restore logging level
-                easyocr_logger.setLevel(old_level)
+                # Restore logging
+                root_logger.setLevel(old_root_level)
+                for logger_name in ['easyocr', 'easyocr.easyocr']:
+                    logger = logging.getLogger(logger_name)
+                    logger.disabled = False
+                    logger.setLevel(logging.WARNING)
 
     def _perform_ocr(self, ocr_client: Any, image: Any) -> List[str]:
         """Run EasyOCR reader and return detected text lines."""
