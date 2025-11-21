@@ -103,8 +103,14 @@ class PdfExtractorFitz(BaseTool):
         Used when PDF has extractable text - we only need OCR for images on first page.
         """
         if Reader is None:
-            # EasyOCR not available - silently skip OCR
-            return ""
+            missing_dep = "easyocr"
+            if _easyocr_import_error is not None:
+                missing_dep = f"{missing_dep} ({_easyocr_import_error})"
+            raise RuntimeError(
+                "EasyOCR is not available. Please install the optional OCR dependency "
+                "easyocr>=1.7.1. "
+                f"Original import issue: {missing_dep}"
+            )
 
         doc = fitz.open(pdf_path)
         try:
@@ -116,10 +122,6 @@ class PdfExtractorFitz(BaseTool):
             langs = self._resolve_ocr_langs()
             ocr_client = self._get_ocr_client(langs, self.ocr_use_gpu)
             
-            # If OCR client failed to initialize, skip OCR gracefully
-            if ocr_client is None:
-                return ""
-            
             # Convert the entire first page to an image and run OCR on it
             # This captures all text from images, logos, and any rendered content
             pix = first_page.get_pixmap(dpi=self.ocr_dpi)
@@ -129,9 +131,6 @@ class PdfExtractorFitz(BaseTool):
             
             ocr_results = self._perform_ocr(ocr_client, data)
             return "\n".join(ocr_results).strip() if ocr_results else ""
-        except Exception:
-            # If OCR fails for any reason (OOM, segfault, etc.), silently skip it
-            return ""
         finally:
             doc.close()
     
@@ -141,8 +140,14 @@ class PdfExtractorFitz(BaseTool):
         Used when PDF has no extractable text (scanned PDFs) - need OCR on all pages.
         """
         if Reader is None:
-            # EasyOCR not available - silently skip OCR
-            return ""
+            missing_dep = "easyocr"
+            if _easyocr_import_error is not None:
+                missing_dep = f"{missing_dep} ({_easyocr_import_error})"
+            raise RuntimeError(
+                "EasyOCR is not available. Please install the optional OCR dependency "
+                "easyocr>=1.7.1. "
+                f"Original import issue: {missing_dep}"
+            )
 
         doc = fitz.open(pdf_path)
         try:
@@ -153,33 +158,22 @@ class PdfExtractorFitz(BaseTool):
             langs = self._resolve_ocr_langs()
             ocr_client = self._get_ocr_client(langs, self.ocr_use_gpu)
             
-            # If OCR client failed to initialize, skip OCR gracefully
-            if ocr_client is None:
-                return ""
-            
             # Process all pages for scanned PDFs
             for i, page in enumerate(doc):
                 if self.max_pages and i >= self.max_pages:
                     break
                 
-                try:
-                    # Convert each page to an image and run OCR on it
-                    pix = page.get_pixmap(dpi=self.ocr_dpi)
-                    data = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
-                    if pix.n == 4:
-                        data = data[:, :, :3]
-                    
-                    ocr_results = self._perform_ocr(ocr_client, data)
-                    if ocr_results:
-                        page_texts.extend(ocr_results)
-                except Exception:
-                    # If OCR fails on a page, skip it and continue
-                    continue
+                # Convert each page to an image and run OCR on it
+                pix = page.get_pixmap(dpi=self.ocr_dpi)
+                data = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+                if pix.n == 4:
+                    data = data[:, :, :3]
+                
+                ocr_results = self._perform_ocr(ocr_client, data)
+                if ocr_results:
+                    page_texts.extend(ocr_results)
             
             return "\n".join(page_texts).strip()
-        except Exception:
-            # If OCR fails completely, silently skip it
-            return ""
         finally:
             doc.close()
 
@@ -193,133 +187,14 @@ class PdfExtractorFitz(BaseTool):
 
     def _get_ocr_client(self, langs: List[str], use_gpu: bool) -> Any:
         if Reader is None:
-            # Don't raise error - just return None and skip OCR
-            return None
+            raise RuntimeError(
+                "EasyOCR is not available. Install easyocr>=1.7.1 to enable OCR fallback."
+            )
 
-        key = (tuple(sorted(langs)), use_gpu)  # Sort langs for consistent key matching
+        key = (tuple(langs), use_gpu)
         if key not in self.__class__._ocr_clients:
-            # Lazy initialization with aggressive suppression to prevent crashes
-            try:
-                import logging
-                import warnings
-                import os
-                from contextlib import redirect_stderr, redirect_stdout
-                from io import StringIO
-                
-                # Suppress EasyOCR loggers completely
-                for logger_name in ['easyocr', 'easyocr.easyocr']:
-                    logger = logging.getLogger(logger_name)
-                    logger.setLevel(logging.CRITICAL)
-                    logger.disabled = True
-                
-                # Suppress root logger
-                root_logger = logging.getLogger()
-                old_root_level = root_logger.level
-                root_logger.setLevel(logging.CRITICAL)
-                
-                try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        # Redirect all output to prevent any prints that could cause issues
-                        with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
-                            # Initialize with minimal settings to reduce memory footprint
-                            self.__class__._ocr_clients[key] = Reader(
-                                langs, 
-                                gpu=use_gpu, 
-                                verbose=False,
-                                download_enabled=True  # Allow download but suppress output
-                            )
-                finally:
-                    root_logger.setLevel(old_root_level)
-                    for logger_name in ['easyocr', 'easyocr.easyocr']:
-                        logger = logging.getLogger(logger_name)
-                        logger.disabled = False
-                        logger.setLevel(logging.WARNING)
-            except Exception as e:
-                # If initialization fails (OOM, segfault, etc.), don't crash - just skip OCR
-                # Log to stderr but don't raise
-                import sys
-                print(f"[WARNING] EasyOCR initialization failed, OCR will be skipped: {e}", file=sys.stderr, flush=True)
-                return None
-        return self.__class__._ocr_clients.get(key)
-
-    @classmethod
-    def pre_initialize_ocr(cls, ocr_lang: str = "en,de,fr", use_gpu: bool = False) -> None:
-        """
-        Pre-initialize EasyOCR client to download models at startup instead of during first use.
-        This prevents model downloads during runtime, which is especially important for deployment.
-        
-        Args:
-            ocr_lang: Comma-separated list of language codes (e.g., "en,de,fr")
-            use_gpu: Whether to use GPU acceleration
-        """
-        if Reader is None:
-            # EasyOCR not available, skip initialization
-            return
-        
-        # Resolve languages using the EXACT same logic as _resolve_ocr_langs
-        langs = [chunk.strip() for chunk in ocr_lang.split(",")]
-        unique_langs: List[str] = []
-        for lang in langs:
-            if lang and lang not in unique_langs:
-                unique_langs.append(lang)
-        unique_langs = unique_langs or ["en"]
-        
-        # Initialize the client (this will download models if needed)
-        # Sort langs for consistent key matching with _get_ocr_client
-        key = (tuple(sorted(unique_langs)), use_gpu)
-        if key not in cls._ocr_clients:
-            # Completely suppress all EasyOCR output during initialization
-            import warnings
-            import logging
-            import sys
-            import os
-            from contextlib import redirect_stderr, redirect_stdout
-            from io import StringIO
-            
-            # Set environment variable to suppress EasyOCR output
-            os.environ['EASYOCR_MODULE_PATH'] = os.environ.get('EASYOCR_MODULE_PATH', '')
-            
-            # Suppress all EasyOCR loggers
-            for logger_name in ['easyocr', 'easyocr.easyocr']:
-                logger = logging.getLogger(logger_name)
-                logger.setLevel(logging.CRITICAL)
-                logger.disabled = True
-            
-            # Suppress root logger warnings
-            root_logger = logging.getLogger()
-            old_root_level = root_logger.level
-            root_logger.setLevel(logging.CRITICAL)
-            
-            try:
-                # Suppress all warnings and redirect both stdout and stderr
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    # Redirect both stdout and stderr to completely silence output
-                    with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
-                        # Create the Reader - this triggers model download if not already cached
-                        reader = Reader(unique_langs, gpu=use_gpu, verbose=False)
-                        cls._ocr_clients[key] = reader
-                        
-                        # CRITICAL: Force model download by running OCR on a dummy image
-                        # This ensures models are fully downloaded and loaded into memory
-                        try:
-                            # Create a minimal 10x10 white image to trigger model loading
-                            dummy_image = np.ones((10, 10, 3), dtype=np.uint8) * 255
-                            # Run readtext to force model download and initialization
-                            # This is the key step that actually downloads the models
-                            reader.readtext(dummy_image, detail=0, paragraph=False)
-                        except Exception:
-                            # If dummy OCR fails, that's OK - models are still initialized
-                            # The actual OCR will work when called with real images
-                            pass
-            finally:
-                # Restore logging
-                root_logger.setLevel(old_root_level)
-                for logger_name in ['easyocr', 'easyocr.easyocr']:
-                    logger = logging.getLogger(logger_name)
-                    logger.disabled = False
-                    logger.setLevel(logging.WARNING)
+            self.__class__._ocr_clients[key] = Reader(langs, gpu=use_gpu, verbose=False)
+        return self.__class__._ocr_clients[key]
 
     def _perform_ocr(self, ocr_client: Any, image: Any) -> List[str]:
         """Run EasyOCR reader and return detected text lines."""

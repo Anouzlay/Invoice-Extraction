@@ -61,7 +61,6 @@ if api_key:
     os.environ["OPENAI_API_KEY"] = api_key
 
 from crew import crew
-from agent.tools.pdf_extractor_fitz import PdfExtractorFitz
 
 BASE_DIR = Path(__file__).resolve().parent
 EXAMPLE_DIR = BASE_DIR / "ExampleFiles"
@@ -669,12 +668,14 @@ def main() -> None:
         layout="wide",
     )
 
-#Old Code used to check for API key and show error if not found (only on Streamlit Cloud)
+    # Check for API key and show error if not found
     api_key = _get_openai_api_key()
     if not api_key:
-        # Check if we're likely on Streamlit Cloud (secrets should be available)
+        # Check if we're on Streamlit Cloud (secrets should be available)
+        is_streamlit_cloud = False
         try:
             if hasattr(st, "secrets") and st.secrets is not None:
+                is_streamlit_cloud = True
                 # We're on Streamlit Cloud but key is missing
                 st.error("⚠️ **OPENAI_API_KEY not found in Streamlit secrets**")
                 
@@ -701,11 +702,26 @@ def main() -> None:
                 st.markdown("5. **Restart your app** from the Streamlit Cloud dashboard")
                 st.stop()
         except Exception as e:
-            # Local development - will use .env file via crew.py
-            # But if we're on Streamlit Cloud and there's an error, show it
-            if "streamlit" in str(type(st)).lower():
-                st.warning(f"Could not access secrets: {str(e)}")
-            pass
+            # Not on Streamlit Cloud - check if we're on Render or other platform
+            if not is_streamlit_cloud:
+                st.error("⚠️ **OPENAI_API_KEY not found in environment variables**")
+                st.markdown("### For Render Deployment:")
+                st.markdown("1. Go to your Render dashboard: https://dashboard.render.com")
+                st.markdown("2. Select your web service")
+                st.markdown("3. Navigate to **Environment** section")
+                st.markdown("4. Add environment variable:")
+                st.code('OPENAI_API_KEY = sk-proj-your-key-here', language="text")
+                st.markdown("5. Click **Save Changes** and redeploy your service")
+                st.markdown("---")
+                st.markdown("### For Local Development:")
+                st.markdown("Create a `.env` file in the project root with:")
+                st.code('OPENAI_API_KEY=sk-proj-your-key-here', language="text")
+                st.stop()
+            else:
+                # Streamlit Cloud error
+                if "streamlit" in str(type(st)).lower():
+                    st.warning(f"Could not access secrets: {str(e)}")
+                pass
 
     _inject_ui_overrides()
 

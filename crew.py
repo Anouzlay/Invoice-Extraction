@@ -39,13 +39,7 @@ llm = ChatOpenAI(
 BASE_DIR = Path(__file__).resolve().parent
 
 # Instantiate tools with their BaseTool "config" fields using absolute paths
-pdf_tool = PdfExtractorFitz(max_pages=0)
-
-# NOTE: EasyOCR initialization is now LAZY (only when first needed)
-# This prevents app crashes from OOM/segfaults during startup
-# Models will download on first OCR use, but with aggressive error handling
-# If EasyOCR fails to initialize, OCR will be gracefully skipped
-
+pdf_tool = PdfExtractorFitz(max_pages=0)  
 master_tool = VendorMasterLookup(master_path=str(BASE_DIR / "knowledge" / "Vendor-Master_20251030_total.xlsx"), min_score=0.82)
 cost_category_tool = CostCategoryLookup(allocation_path=str(BASE_DIR / "knowledge" / "Vendor_Cost-Category-Allocation_V20251031.xlsx"))
 
