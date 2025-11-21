@@ -61,6 +61,7 @@ if api_key:
     os.environ["OPENAI_API_KEY"] = api_key
 
 from crew import crew
+from agent.tools.pdf_extractor_fitz import PdfExtractorFitz
 
 BASE_DIR = Path(__file__).resolve().parent
 EXAMPLE_DIR = BASE_DIR / "ExampleFiles"

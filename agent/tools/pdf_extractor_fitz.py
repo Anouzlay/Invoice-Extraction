@@ -196,6 +196,47 @@ class PdfExtractorFitz(BaseTool):
             self.__class__._ocr_clients[key] = Reader(langs, gpu=use_gpu, verbose=False)
         return self.__class__._ocr_clients[key]
 
+    @classmethod
+    def pre_initialize_ocr(cls, ocr_lang: str = "en,de,fr", use_gpu: bool = False) -> None:
+        """
+        Pre-initialize EasyOCR client to download models at startup instead of during first use.
+        This prevents model downloads during runtime, which is especially important for deployment.
+        
+        Args:
+            ocr_lang: Comma-separated list of language codes (e.g., "en,de,fr")
+            use_gpu: Whether to use GPU acceleration
+        """
+        if Reader is None:
+            # EasyOCR not available, skip initialization
+            return
+        
+        # Resolve languages
+        langs = [chunk.strip() for chunk in ocr_lang.split(",")]
+        unique_langs: List[str] = []
+        for lang in langs:
+            if lang and lang not in unique_langs:
+                unique_langs.append(lang)
+        unique_langs = unique_langs or ["en"]
+        
+        # Initialize the client (this will download models if needed)
+        key = (tuple(unique_langs), use_gpu)
+        if key not in cls._ocr_clients:
+            # Create the Reader - this triggers model download if not already cached
+            reader = Reader(unique_langs, gpu=use_gpu, verbose=False)
+            cls._ocr_clients[key] = reader
+            
+            # Force model download by running OCR on a tiny dummy image
+            # This ensures models are fully downloaded and loaded into memory
+            try:
+                # Create a minimal 10x10 white image to trigger model loading
+                dummy_image = np.ones((10, 10, 3), dtype=np.uint8) * 255
+                # Run readtext to force model download and initialization
+                reader.readtext(dummy_image, detail=0, paragraph=False)
+            except Exception:
+                # If dummy OCR fails, that's OK - models are still initialized
+                # The actual OCR will work when called with real images
+                pass
+
     def _perform_ocr(self, ocr_client: Any, image: Any) -> List[str]:
         """Run EasyOCR reader and return detected text lines."""
         results = ocr_client.readtext(image, detail=1, paragraph=False) or []
