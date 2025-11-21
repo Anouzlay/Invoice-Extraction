@@ -41,15 +41,10 @@ BASE_DIR = Path(__file__).resolve().parent
 # Instantiate tools with their BaseTool "config" fields using absolute paths
 pdf_tool = PdfExtractorFitz(max_pages=0)
 
-# Pre-initialize EasyOCR models at module import time to prevent downloads during runtime
-# This ensures models are downloaded during app startup, not during user requests
-# This is critical for deployment to avoid model downloads during user requests
-try:
-    PdfExtractorFitz.pre_initialize_ocr(ocr_lang="en,de,fr", use_gpu=False)
-except Exception:
-    # Silently fail - OCR will still work, just might download models on first use
-    # This prevents blocking the app startup if there are network issues
-    pass
+# NOTE: EasyOCR initialization is now LAZY (only when first needed)
+# This prevents app crashes from OOM/segfaults during startup
+# Models will download on first OCR use, but with aggressive error handling
+# If EasyOCR fails to initialize, OCR will be gracefully skipped
 
 master_tool = VendorMasterLookup(master_path=str(BASE_DIR / "knowledge" / "Vendor-Master_20251030_total.xlsx"), min_score=0.82)
 cost_category_tool = CostCategoryLookup(allocation_path=str(BASE_DIR / "knowledge" / "Vendor_Cost-Category-Allocation_V20251031.xlsx"))
